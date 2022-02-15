@@ -1,6 +1,4 @@
-from fileinput import filename
 from pathlib import Path
-from tkinter import E
 from typing import List
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -11,7 +9,8 @@ import os
 from glob import glob
 from fiona.errors import DriverError
 from shapely.geometry import Polygon
-
+import georasters as gr
+import pandas as pd
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -46,7 +45,7 @@ def load_dataset_wfs(dataset_name:str):
 def read_map_file(str_path: str, type="gml"):
     if type=="gml":
         logger.info(f"Reading {str_path}")
-        return gpd.read_file(str_path, driver='GML')
+        return gpd.read_file(str_path, driver='GML', crs="epsg:3879")
     else:
         raise ValueError("Unsupported file type")
 
@@ -60,7 +59,8 @@ def plot_layer(d, ax, boundary=False, **kwargs) -> None:
 
 
 if __name__ == '__main__':
-
+    best_place = None
+    constraints = None
     ## define bbox so we don't draw all of HEL
     xlim = (2.5491*1e7, 2.5502*1e7)
     ylim = (6.670*1e6, 6.680*1e6)
@@ -73,14 +73,19 @@ if __name__ == '__main__':
          )
     bbox=gpd.GeoDataFrame({'geometry': bbox, 'df1_data':[1]})
 
+    # TODO: raster base map?
+    #myRaster = 'data/OpHki_4m_harmaa_pohja.tif'
+    #base_map = gr.from_file(myRaster)
+
     # Define datasets
     open_data_datasets = [
+        'avoidata:Opaskartta_alue',
         #"avoindata:Maavesi_vesialue_yleistetty",
         "avoindata:Maavesi_merialue",
-        "avoindata:Maavesi_muut_vesialueet",
+        #"avoindata:Maavesi_muut_vesialueet",
         "avoindata:YLRE_Viheralue_alue",
         #"avoindata:Toimipisterekisteri_yksikot",
-        "avoindata:Toimipisterekisteri_palvelut"
+        "avoindata:Toimipisterekisteri_palvelut",
         'avoindata:Postinumeroalue'
     ]
     data_paths = [Path(x).stem for x in glob("data/*.gml")]
@@ -97,8 +102,10 @@ if __name__ == '__main__':
     plot_kwargs = {
         'avoindata:Maavesi_merialue': {"alpha":0.2, "color":"blue"},
         "avoindata:Maavesi_muut_vesialueet": {"alpha":0.2, "color":"blue"},
-        "avoindata:YLRE_Viheralue_alue":{"alpha":0.3, "color":"green"},
+        "avoindata:YLRE_Viheralue_alue":{"alpha":0.2, "color":"green"},
         'avoindata:Postinumeroalue': {"edgecolor":"grey", "linewidth":1},
+        'avoindata:Toimipisterekisteri_palvelut': {"alpha":0.2, "color":"purple"},
+        'avoidata:Opaskartta_alue': {"linewidth":0.03, "color":"grey"}
     }
     for dataset in open_data_datasets:
         file_path = "data/" + dataset.replace("avoindata:","") + ".gml"
@@ -116,11 +123,48 @@ if __name__ == '__main__':
             uimaranta = d.loc[d.service_ids=="731"]
             urheilukentta = d.loc[d.service_ids=="817"]
             kuntosalit = d.loc[d.service_ids=="350"]
+            d = suomenkielinen_pvhoito
+            DAYCARE_BUFFER = 500
+            d['geometry'] = d.buffer(DAYCARE_BUFFER)
+            d["constaint_name"] = "daycare"
 
+        if dataset == 'avoindata:YLRE_Viheralue_alue':
+            big_parks = d
+            big_parks["area"] = big_parks.geometry.apply(lambda x: x.area)
+            PARK_MIN_AREA = 110000
+            BUFFER_DISTANCE = 700
+            big_parks = big_parks.loc[big_parks["area"] > PARK_MIN_AREA]
+            d['geometry'] = big_parks.buffer(BUFFER_DISTANCE)
+            d["constaint_name"] = "big_park"
+            
+        if dataset == 'avoindata:Maavesi_merialue':
+            water_areas = d
+            WATER_BUFFER_DISTANCE = 700
+            d['geometry'] = water_areas.buffer(WATER_BUFFER_DISTANCE)
+            d["constaint_name"] = "sea"
+
+        if dataset == "avoindata:Maavesi_muut_vesialueet":
+            small_water_areas = d
+            SMALL_WATER_BUFFER_DISTANCE = 100
+            d['geometry'] = small_water_areas.buffer(SMALL_WATER_BUFFER_DISTANCE)
+            d["constaint_name"] = "other_water"
+        
+        
         new_kwargs = plot_kwargs.get(dataset, {})
-        if dataset == 'avoindata:Postinumeroalue':
+        if dataset == 'avoindata:Postinumeroalue' or dataset == 'avoidata:Opaskartta_alue':
             plot_layer(d, ax=ax, boundary=True, **new_kwargs)
         else:
             plot_layer(d, ax=ax, boundary=False, **new_kwargs)
+            constraints = pd.concat([constraints, d])
+            if best_place is None:
+                best_place = d
+            else:
+                print(dataset)
+                best_place = gpd.overlay(best_place, d, how="intersection")
+            print(best_place.shape)
+            print(best_place.head(5))
+    best_place.plot(color="red", alpha=0.5, ax=ax)
     ax.set_axis_off()
     plt.show()
+
+    #constraints.explore(column="constraint_name", tooltip="constraint_name", popup=False, tiles="CartoDB positron", cmap="Set1",style_kwds=dict(color="black"))
