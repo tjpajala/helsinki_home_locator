@@ -69,8 +69,8 @@ if True:
     best_place = None
     constraints = None
     ## define bbox so we don't draw all of HEL
-    xlim = (2.5491 * 1e7, 2.5502 * 1e7)
-    ylim = (6.670 * 1e6, 6.680 * 1e6)
+    xlim = (2.5491 * 1e7, 2.5902 * 1e7)
+    ylim = (6.670 * 1e6, 6.690 * 1e6)
     bbox = gpd.GeoSeries(
         Polygon(
             [
@@ -89,7 +89,7 @@ if True:
 
     # Define datasets
     open_data_datasets = [
-        "avoindata:Opaskartta_alue",
+        #"avoindata:Opaskartta_alue",
         # "avoindata:Maavesi_vesialue_yleistetty",
         "avoindata:Maavesi_merialue",
         # "avoindata:Maavesi_muut_vesialueet",
@@ -135,10 +135,10 @@ if True:
             urheilukentta = d.loc[d.service_ids == "817"]
             kuntosalit = d.loc[d.service_ids == "350"]
             d = suomenkielinen_pvhoito
-            DAYCARE_BUFFER = 700
-            LOWER_SCHOOL_BUFFER = 700
+            DAYCARE_BUFFER = 500
+            LOWER_SCHOOL_BUFFER = 500
             UPPER_SCHOOL_BUFFER = 2000
-            TRACK_FIELD_BUFFER = 3000
+            TRACK_FIELD_BUFFER = 10000
             d["geometry"] = d.buffer(DAYCARE_BUFFER)
             d["constraint_name"] = "daycare"
             d = d[["constraint_name", "geometry"]]
@@ -160,20 +160,20 @@ if True:
             # TODO: These need to be added to constraints separately
             d = pd.concat([d, suomenkielinen_alakoulu])
             d = pd.concat([d, suomenkielinen_ylakoulu])
-            d = pd.concat([d, urheilukentta])
+            #d = pd.concat([d, urheilukentta])
 
         if dataset == "avoindata:YLRE_Viheralue_alue":
             big_parks = d
             big_parks["area"] = big_parks.geometry.apply(lambda x: x.area)
             PARK_MIN_AREA = 110000
-            BUFFER_DISTANCE = 1000
+            BUFFER_DISTANCE = 700
             big_parks = big_parks.loc[big_parks["area"] > PARK_MIN_AREA]
             d["geometry"] = big_parks.buffer(BUFFER_DISTANCE)
             d["constraint_name"] = "big_park"
 
         if dataset == "avoindata:Maavesi_merialue":
             water_areas = d
-            WATER_BUFFER_DISTANCE = 1000
+            WATER_BUFFER_DISTANCE = 700
             d["geometry"] = water_areas.buffer(WATER_BUFFER_DISTANCE)
             d["constraint_name"] = "sea"
 
@@ -203,6 +203,49 @@ if True:
     plt.show()
 #%%
 constraints
+
+#%%
+constraints.head()
+# %%
+m2 = folium.Map(location=[60.18, 24.94], zoom_start=11)
+best_place = None
+for constr in sorted(list(constraints.constraint_name.unique())):
+    print(constr)
+    if best_place is None:
+        best_place = constraints.loc[
+            constraints.constraint_name == constr, ["constraint_name", "geometry"]
+        ].dropna(subset=["geometry"])
+    else:
+        if (
+            len(
+                constraints.loc[
+                    constraints.constraint_name == constr,
+                    ["constraint_name", "geometry"],
+                ].dropna(subset=["geometry"])
+            )
+            == 0
+        ):
+            print(f"Skipping {constr}")
+            continue
+        best_place = gpd.overlay(
+            best_place,
+            constraints.loc[
+                constraints.constraint_name == constr, ["constraint_name", "geometry"]
+            ]
+            .dropna(subset=["geometry"])
+            .rename(columns={"constraint_name": constr}),
+            how="intersection",
+        )
+
+# folium.TileLayer('Stamen Toner', control=True).add_to(m)  # use folium to add alternative tiles
+best_place.set_crs(epsg=3879).explore(
+    popup=False,
+    tiles="OpenStreetMap",
+    cmap="red",
+    style_kwds=dict(color="red", opacity=0.0, fillOpacity=0.1),
+    m=m2,
+)
+
 # %%
 m = folium.Map(location=[60.18, 24.94], zoom_start=11)
 # folium.TileLayer('Stamen Toner', control=True).add_to(m)  # use folium to add alternative tiles
@@ -221,45 +264,3 @@ constraints.set_crs(epsg=3879).explore(
     m=m,
 )
 # m
-#%%
-constraints.head()
-# %%
-m2 = folium.Map(location=[60.18, 24.94], zoom_start=11)
-best_place = None
-for constr in sorted(list(constraints.constraint_name.unique())):
-    print(constr)
-    if best_place is None:
-        best_place = constraints.loc[
-            constraints.constraint_name == constr, ["constraint_name", "geometry"]
-        ].dropna(subset="geometry")
-    else:
-        if (
-            len(
-                constraints.loc[
-                    constraints.constraint_name == constr,
-                    ["constraint_name", "geometry"],
-                ].dropna(subset="geometry")
-            )
-            == 0
-        ):
-            print(f"Skipping {constr}")
-            continue
-        best_place = gpd.overlay(
-            best_place,
-            constraints.loc[
-                constraints.constraint_name == constr, ["constraint_name", "geometry"]
-            ]
-            .dropna(subset="geometry")
-            .rename(columns={"constraint_name": constr}),
-            how="intersection",
-        )
-
-# folium.TileLayer('Stamen Toner', control=True).add_to(m)  # use folium to add alternative tiles
-best_place.set_crs(epsg=3879).explore(
-    popup=False,
-    tiles="OpenStreetMap",
-    cmap="red",
-    style_kwds=dict(color="red", opacity=0.0, fillOpacity=0.1),
-    m=m2,
-)
-# %%
