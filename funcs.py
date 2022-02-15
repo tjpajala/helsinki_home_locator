@@ -1,3 +1,4 @@
+#%%
 from pathlib import Path
 from typing import List
 import geopandas as gpd
@@ -11,6 +12,8 @@ from fiona.errors import DriverError
 from shapely.geometry import Polygon
 import georasters as gr
 import pandas as pd
+import folium
+from IPython.display import display
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -57,8 +60,9 @@ def plot_layer(d, ax, boundary=False, **kwargs) -> None:
     else:
         d.plot(ax=ax, **kwargs)
 
-
-if __name__ == '__main__':
+#%%
+#if __name__ == '__main__':
+if True:
     best_place = None
     constraints = None
     ## define bbox so we don't draw all of HEL
@@ -97,6 +101,7 @@ if __name__ == '__main__':
         else:
             logger.info(f"Dataset {dataset} already exists.")
 
+#%%
     fig, ax = plt.subplots(figsize=(12,8))
     ax.set_aspect('equal')
     plot_kwargs = {
@@ -126,7 +131,7 @@ if __name__ == '__main__':
             d = suomenkielinen_pvhoito
             DAYCARE_BUFFER = 500
             d['geometry'] = d.buffer(DAYCARE_BUFFER)
-            d["constaint_name"] = "daycare"
+            d["constraint_name"] = "daycare"
 
         if dataset == 'avoindata:YLRE_Viheralue_alue':
             big_parks = d
@@ -135,19 +140,19 @@ if __name__ == '__main__':
             BUFFER_DISTANCE = 700
             big_parks = big_parks.loc[big_parks["area"] > PARK_MIN_AREA]
             d['geometry'] = big_parks.buffer(BUFFER_DISTANCE)
-            d["constaint_name"] = "big_park"
+            d["constraint_name"] = "big_park"
             
         if dataset == 'avoindata:Maavesi_merialue':
             water_areas = d
             WATER_BUFFER_DISTANCE = 700
             d['geometry'] = water_areas.buffer(WATER_BUFFER_DISTANCE)
-            d["constaint_name"] = "sea"
+            d["constraint_name"] = "sea"
 
         if dataset == "avoindata:Maavesi_muut_vesialueet":
             small_water_areas = d
             SMALL_WATER_BUFFER_DISTANCE = 100
             d['geometry'] = small_water_areas.buffer(SMALL_WATER_BUFFER_DISTANCE)
-            d["constaint_name"] = "other_water"
+            d["constraint_name"] = "other_water"
         
         
         new_kwargs = plot_kwargs.get(dataset, {})
@@ -155,7 +160,7 @@ if __name__ == '__main__':
             plot_layer(d, ax=ax, boundary=True, **new_kwargs)
         else:
             plot_layer(d, ax=ax, boundary=False, **new_kwargs)
-            constraints = pd.concat([constraints, d])
+            constraints = pd.concat([constraints, d[["constraint_name","geometry"]].dropna(subset=["geometry"])])
             if best_place is None:
                 best_place = d
             else:
@@ -166,5 +171,9 @@ if __name__ == '__main__':
     best_place.plot(color="red", alpha=0.5, ax=ax)
     ax.set_axis_off()
     plt.show()
-
-    #constraints.explore(column="constraint_name", tooltip="constraint_name", popup=False, tiles="CartoDB positron", cmap="Set1",style_kwds=dict(color="black"))
+#%%
+constraints
+#%%
+    m = constraints.explore(column="constraint_name", tooltip="constraint_name", popup=False, tiles="OpenStreetMap", cmap="Set1",style_kwds=dict(color="black"))
+    m
+# %%
